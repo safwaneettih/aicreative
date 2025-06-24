@@ -1,0 +1,29 @@
+#!/bin/sh
+# Pre-commit hook to prevent committing secrets
+# To install: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+echo "🔍 Checking for secrets in staged files..."
+
+# Check for common API key patterns (excluding security documentation)
+if git diff --cached --name-only | grep -v "SECURITY_NOTICE.md" | grep -v "scripts/pre-commit" | xargs grep -l "AIzaSy[a-zA-Z0-9_-]\{32,\}\|sk_[a-zA-Z0-9]\{48,\}\|api_key\s*=\s*['\"][a-zA-Z0-9_-]\{10,\}['\"]\|API_KEY\s*=\s*['\"][a-zA-Z0-9_-]\{10,\}['\"]" 2>/dev/null; then
+    echo "🚨 ERROR: Potential API keys or secrets found in staged files!"
+    echo "Files containing potential secrets:"
+    git diff --cached --name-only | grep -v "SECURITY_NOTICE.md" | grep -v "scripts/pre-commit" | xargs grep -l "AIzaSy[a-zA-Z0-9_-]\{32,\}\|sk_[a-zA-Z0-9]\{48,\}\|api_key\s*=\s*['\"][a-zA-Z0-9_-]\{10,\}['\"]\|API_KEY\s*=\s*['\"][a-zA-Z0-9_-]\{10,\}['\"]" 2>/dev/null
+    echo ""
+    echo "Please remove the secrets and use environment variables instead."
+    echo "See tests/TEST_CONFIG_TEMPLATE.md for proper configuration."
+    exit 1
+fi
+
+# Check for .env files (except .env.example)
+if git diff --cached --name-only | grep -E "\.env$|\.env\." | grep -v "\.env\.example"; then
+    echo "🚨 ERROR: .env files should not be committed!"
+    echo "Files found:"
+    git diff --cached --name-only | grep -E "\.env$|\.env\." | grep -v "\.env\.example"
+    echo ""
+    echo "Please remove .env files from the commit and add them to .gitignore"
+    exit 1
+fi
+
+echo "✅ No secrets detected in staged files."
+exit 0
