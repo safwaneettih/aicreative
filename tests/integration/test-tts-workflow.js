@@ -1,7 +1,6 @@
 // Test TTS generation with the clean script
-// Set environment variables manually for testing
-process.env.GEMINI_API_KEY = 'AIzaSyACSPZ5B6ZVYI-Km4OcvXpWTlzVMzJTpo4';
-process.env.ELEVENLABS_API_KEY = 'sk_2f3ae479b03b5e01290fca484a33424a6d51f6196ec5b76e';
+// Environment variables should be set before running tests
+// Example: GEMINI_API_KEY=your_key ELEVENLABS_API_KEY=your_key node test-tts-workflow.js
 
 const geminiService = require('./server/utils/geminiService');
 const elevenLabsService = require('./server/utils/elevenLabsService');
