@@ -1,0 +1,33 @@
+{
+  "name": "ai-creative-builder",
+  "version": "1.0.0",
+  "description": "AI-powered web application for media buyers creating ad creatives",
+  "scripts": {
+    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "server:dev": "cd server && npm run dev",
+    "client:dev": "cd client && npm start",
+    "server:install": "cd server && npm install",
+    "client:install": "cd client && npm install",
+    "install:all": "npm run server:install && npm run client:install",
+    "build": "cd client && npm run build",
+    "start": "cd server && npm start",
+    "test": "npm run test:integration",
+    "test:unit": "cd server && npm run test:unit",
+    "test:integration": "cd server && npm run test:integration",
+    "test:e2e": "cd client && npm run test:e2e",
+    "test:coverage": "cd server && npm run test:coverage",
+    "test:watch": "cd server && npm run test:watch"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": [
+    "ai",
+    "video",
+    "creative",
+    "media-buyer",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT"
+}

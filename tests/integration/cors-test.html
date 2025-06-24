@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>CORS Login Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+        }
+
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .success {
+            border-color: green;
+            background-color: #f0fff0;
+        }
+
+        .error {
+            border-color: red;
+            background-color: #fff0f0;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+        }
+
+        input {
+            padding: 8px;
+            margin: 5px;
+            width: 200px;
+        }
+
+        .log {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 3px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🌐 Network CORS Test</h1>
+
+    <div class="test-section">
+        <h2>Connection Test</h2>
+        <p>Current page: <span id="currentUrl"></span></p>
+        <p>API Base URL: <span id="apiBaseUrl"></span></p>
+        <button onclick="testConnection()">Test API Connection</button>
+        <div id="connectionResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Login Test</h2>
+        <div>
+            <input type="email" id="email" placeholder="Email" value="test@example.com">
+            <input type="password" id="password" placeholder="Password" value="password123">
+        </div>
+        <div>
+            <button onclick="testLogin()">Test Login</button>
+            <button onclick="testRegister()">Test Register</button>
+        </div>
+        <div id="loginResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Console Log</h2>
+        <div id="consoleLog" class="log"></div>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <script>
+        // Utility functions
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logDiv = document.getElementById('consoleLog');
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            logEntry.style.color = type === 'error' ? 'red' : type === 'success' ? 'green' : 'black';
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('consoleLog').innerHTML = '';
+        }
+
+        function getApiBaseUrl() {
+            const hostname = window.location.hostname;
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                return 'http://localhost:5000';
+            }
+            return `http://${hostname}:5000`;
+        }
+
+        // Initialize page
+        document.getElementById('currentUrl').textContent = window.location.href;
+        document.getElementById('apiBaseUrl').textContent = getApiBaseUrl();
+
+        // Test API connection
+        async function testConnection() {
+            const apiBaseUrl = getApiBaseUrl();
+            const resultDiv = document.getElementById('connectionResult');
+
+            try {
+                log('🔄 Testing API connection...', 'info');
+
+                const response = await fetch(`${apiBaseUrl}/api/health`, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ API connection successful: ${JSON.stringify(data)}`, 'success');
+                    resultDiv.innerHTML = '<p style="color: green;">✅ API Connection Successful</p>';
+                } else {
+                    log(`❌ API connection failed: ${response.status} ${response.statusText}`, 'error');
+                    resultDiv.innerHTML = `<p style="color: red;">❌ API Connection Failed: ${response.status}</p>`;
+                }
+            } catch (error) {
+                log(`❌ API connection error: ${error.message}`, 'error');
+                resultDiv.innerHTML = `<p style="color: red;">❌ Connection Error: ${error.message}</p>`;
+            }
+        }
+
+        // Test login
+        async function testLogin() {
+            const apiBaseUrl = getApiBaseUrl();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('loginResult');
+
+            try {
+                log(`🔐 Testing login with ${email}...`, 'info');
+
+                const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    log(`✅ Login successful!`, 'success');
+                    resultDiv.innerHTML = '<p style="color: green;">✅ Login Successful</p>';
+                } else {
+                    log(`⚠️ Login failed (expected): ${data.error || data.message}`, 'info');
+                    resultDiv.innerHTML = `<p style="color: orange;">⚠️ Login Failed (Expected): ${data.error || data.message}</p>`;
+                }
+
+                log(`📊 Response status: ${response.status}`, 'info');
+                log(`📊 CORS headers: ${response.headers.get('access-control-allow-origin')}`, 'info');
+
+            } catch (error) {
+                log(`❌ Login error: ${error.message}`, 'error');
+                resultDiv.innerHTML = `<p style="color: red;">❌ Login Error: ${error.message}</p>`;
+            }
+        }
+
+        // Test register
+        async function testRegister() {
+            const apiBaseUrl = getApiBaseUrl();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('loginResult');
+
+            try {
+                log(`👤 Testing register with ${email}...`, 'info');
+
+                const response = await fetch(`${apiBaseUrl}/api/auth/register`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: 'Test User',
+                        email,
+                        password
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    log(`✅ Register successful!`, 'success');
+                    resultDiv.innerHTML = '<p style="color: green;">✅ Register Successful</p>';
+                } else {
+                    log(`⚠️ Register failed: ${data.error || data.message}`, 'info');
+                    resultDiv.innerHTML = `<p style="color: orange;">⚠️ Register Failed: ${data.error || data.message}</p>`;
+                }
+
+                log(`📊 Response status: ${response.status}`, 'info');
+
+            } catch (error) {
+                log(`❌ Register error: ${error.message}`, 'error');
+                resultDiv.innerHTML = `<p style="color: red;">❌ Register Error: ${error.message}</p>`;
+            }
+        }
+
+        // Auto-run connection test on load
+        window.onload = function () {
+            log('🌐 Page loaded, running connection test...', 'info');
+            testConnection();
+        };
+    </script>
+</body>
+
+</html>

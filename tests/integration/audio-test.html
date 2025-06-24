@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Audio Test</title>
+</head>
+
+<body>
+    <h1>Audio Playback Test</h1>
+
+    <div>
+        <h2>Test 1: Direct Audio Element</h2>
+        <audio controls>
+            <source src="http://localhost:5000/uploads/voiceovers/voiceover_46ff2f40-9295-4d12-bd5a-cfbd34ab9d54.mp3"
+                type="audio/mpeg">
+            Your browser does not support the audio element.
+        </audio>
+    </div>
+
+    <div>
+        <h2>Test 2: JavaScript Audio</h2>
+        <button onclick="playAudio()">🎵 Play Audio via JavaScript</button>
+    </div>
+
+    <div id="log"></div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            logDiv.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+            console.log(message);
+        }
+
+        async function playAudio() {
+            try {
+                const audioUrl = 'http://localhost:5000/uploads/voiceovers/voiceover_46ff2f40-9295-4d12-bd5a-cfbd34ab9d54.mp3';
+                log('🎵 Testing audio URL: ' + audioUrl);
+
+                // Test accessibility
+                const response = await fetch(audioUrl, { method: 'HEAD' });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                log('✅ Audio file is accessible');
+
+                // Create and play audio
+                const audio = new Audio(audioUrl);
+
+                audio.addEventListener('loadstart', () => log('🔄 Loading started'));
+                audio.addEventListener('canplay', () => log('✅ Can play'));
+                audio.addEventListener('playing', () => log('▶️ Playing'));
+                audio.addEventListener('ended', () => log('⏹️ Ended'));
+                audio.addEventListener('error', (e) => {
+                    log('❌ Audio error: ' + (audio.error ? audio.error.message : 'Unknown error'));
+                });
+
+                await audio.play();
+                log('🎉 Play command executed successfully');
+
+            } catch (error) {
+                log('❌ Error: ' + error.message);
+            }
+        }
+    </script>
+</body>
+
+</html>
