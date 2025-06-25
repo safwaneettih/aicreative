@@ -124,3 +124,45 @@ uploads/
 # Database
 *.sqlite
 *.db
+
+# Whisper.cpp - Large binaries and models should not be committed
+server/whisper.cpp/
+**/whisper.cpp/
+*.bin
+models/*.bin
+whisper
+main
+quantize
+server
+
+# Remotion and TikTok caption temp files
+remotion-out/
+temp_tiktok_captions/
+uploads/temp_tiktok_captions/
+remotion-tiktok-template/
+
+# Video processing temp files
+*.mp4.tmp
+*.wav.tmp
+temp_*.mp4
+temp_*.wav
+
+# Test files and logs
+test-*.js
+test-*.html
+debug-*.log
+check-*.js
+*-test.js
+
+# Large media files (except small logos/icons)
+*.mp4
+*.wav
+*.avi
+*.mov
+*.mkv
+!public/*.mp4
+!public/sample-*.mp4
+
+# Remotion build artifacts
+.remotion/
+remotion-build/

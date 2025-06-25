@@ -187,12 +187,23 @@ app.use('*', (req, res) => {
     res.status(404).json({ error: 'Route not found' });
 });
 
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📊 Environment: ${process.env.NODE_ENV}`);
     console.log(`🌐 Server accessible at:`);
     console.log(`   - Local: http://localhost:${PORT}`);
     console.log(`   - Network: http://0.0.0.0:${PORT}`);
+
+    // Initialize TikTok Caption Service
+    try {
+        console.log('🎬 Initializing TikTok Caption Service...');
+        const tiktokCaptionService = require('./utils/tiktokCaptionService');
+        await tiktokCaptionService.initialize();
+        console.log('✅ TikTok Caption Service initialized successfully');
+    } catch (error) {
+        console.error('❌ Failed to initialize TikTok Caption Service:', error);
+        console.log('⚠️ TikTok captions will not be available');
+    }
 
     // Get network IP for other devices
     const { networkInterfaces } = require('os');

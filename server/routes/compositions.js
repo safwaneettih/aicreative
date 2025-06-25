@@ -7,6 +7,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const multer = require('multer');
 const { authenticateToken: auth } = require('../middleware/auth');
 const db = require('../config/database');
+const tiktokCaptionService = require('../utils/tiktokCaptionService');
 
 // Configure multer for logo uploads
 const logoStorage = multer.diskStorage({
@@ -273,6 +274,8 @@ router.post('/workspace/:workspaceId', auth, async (req, res) => {
         const { name, combinations } = req.body;
         const userId = req.user.id;
 
+        console.log('🎬 Creating compositions with data:', JSON.stringify(combinations[0], null, 2));
+
         // Verify workspace ownership
         const workspaceCheck = await db.query(
             'SELECT id FROM workspaces WHERE id = $1 AND user_id = $2',
@@ -295,9 +298,10 @@ router.post('/workspace/:workspaceId', auth, async (req, res) => {
             const result = await db.query(
                 `INSERT INTO video_compositions 
          (workspace_id, name, hook_clip_id, body_clip_ids, cat_clip_id, voiceover_id, status, job_id, 
-          logo_overlay_path, logo_position, logo_opacity, logo_size, enable_captions, caption_style, 
+          logo_overlay_path, logo_position, logo_opacity, logo_size, enable_captions, caption_style,
+          tiktok_captions_enabled, tiktok_caption_style,
           created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW()) RETURNING id`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW()) RETURNING id`,
                 [
                     workspaceId,
                     `${name} - ${index + 1}`,
@@ -312,7 +316,9 @@ router.post('/workspace/:workspaceId', auth, async (req, res) => {
                     combo.logo_opacity || 0.8,
                     combo.logo_size || 'medium',
                     combo.enable_captions || false,
-                    combo.caption_style || 'default'
+                    combo.caption_style || 'default',
+                    combo.tiktok_captions_enabled || false,
+                    combo.tiktok_caption_style || 'modern'
                 ]
             );
 
@@ -519,6 +525,8 @@ async function processComposition(compositionId) {
 
         console.log(`🎬 Starting composition ${compositionId} processing...`);
         console.log(`🎬 Output file: ${outputFilename}`);
+        console.log(`🎬 TikTok captions debug - comp.tiktok_captions_enabled:`, comp.tiktok_captions_enabled);
+        console.log(`🎬 TikTok captions debug - comp.tiktok_caption_style:`, comp.tiktok_caption_style);
 
         // Build video using FFmpeg
         await buildVideo({
@@ -532,6 +540,8 @@ async function processComposition(compositionId) {
             logoSize: comp.logo_size || 'medium',
             enableCaptions: comp.enable_captions || false,
             captionStyle: comp.caption_style || 'default',
+            tiktokCaptionsEnabled: comp.tiktok_captions_enabled || false,
+            tiktokCaptionStyle: comp.tiktok_caption_style || 'modern',
             outputPath
         });
 
@@ -574,9 +584,15 @@ async function processComposition(compositionId) {
 }
 
 // Build video using FFmpeg
-function buildVideo({ hookPath, bodyPaths, catPath, voiceoverPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, outputPath }) {
+function buildVideo({ hookPath, bodyPaths, catPath, voiceoverPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, tiktokCaptionsEnabled, tiktokCaptionStyle, outputPath }) {
     return new Promise(async (resolve, reject) => {
         try {
+            console.log('🎬 buildVideo called with parameters:');
+            console.log('🎬   enableCaptions:', enableCaptions);
+            console.log('🎬   captionStyle:', captionStyle);
+            console.log('🎬   tiktokCaptionsEnabled:', tiktokCaptionsEnabled);
+            console.log('🎬   tiktokCaptionStyle:', tiktokCaptionStyle);
+
             // Ensure output directory exists
             const outputDir = path.dirname(outputPath);
             await fs.mkdir(outputDir, { recursive: true });
@@ -610,6 +626,18 @@ function buildVideo({ hookPath, bodyPaths, catPath, voiceoverPath, logoOverlayPa
             console.log('🎬 Output path:', outputPath);
             console.log('🎬 Total video inputs:', videoPaths.length);
 
+            // Validate that all video files exist
+            console.log('🔍 Validating video files...');
+            for (let i = 0; i < videoPaths.length; i++) {
+                const videoPath = videoPaths[i];
+                try {
+                    await fs.access(videoPath);
+                    console.log(`✅ Video ${i + 1} exists: ${path.basename(videoPath)}`);
+                } catch (error) {
+                    throw new Error(`Video file ${i + 1} not found: ${videoPath}`);
+                }
+            }
+
             // Create a temporary file for the concatenated video
             const tempVideoPath = outputPath.replace('.mp4', '_temp.mp4');
 
@@ -637,18 +665,37 @@ function buildVideo({ hookPath, bodyPaths, catPath, voiceoverPath, logoOverlayPa
                         console.log('✅ Step 1 - Single video copied without audio');
                         // Step 2: Add voiceover if needed
                         if (voiceoverPath) {
-                            addVoiceoverToVideo(tempVideoPath, voiceoverPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, outputPath, resolve, reject);
+                            addVoiceoverToVideo(tempVideoPath, voiceoverPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, tiktokCaptionsEnabled, tiktokCaptionStyle, outputPath, resolve, reject);
                         } else {
                             // No voiceover - apply logo and captions if needed, then finish
-                            applyVideoEffects(tempVideoPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, outputPath, resolve, reject);
+                            applyVideoEffects(tempVideoPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, tiktokCaptionsEnabled, tiktokCaptionStyle, outputPath, resolve, reject);
                         }
                     })
                     .on('error', reject)
                     .run();
             } else {
                 // Multiple videos - concatenate video streams only (no audio)
-                const filterComplex = videoPaths.map((_, index) => `[${index}:v]`).join('') +
-                    `concat=n=${videoPaths.length}:v=1:a=0[outv]`;
+                // First, normalize all videos to the same resolution (scale to smallest common)
+                
+                // Scale all videos to a standard resolution to ensure compatibility
+                const targetWidth = 360;
+                const targetHeight = 640;
+                
+                console.log(`🔧 Scaling all videos to ${targetWidth}x${targetHeight} for compatibility`);
+                
+                const scaleFilters = videoPaths.map((_, index) => 
+                    `[${index}:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2[v${index}scaled]`
+                );
+                
+                const concatInputs = videoPaths.map((_, index) => `[v${index}scaled]`).join('');
+                const concatFilter = `${concatInputs}concat=n=${videoPaths.length}:v=1:a=0[outv]`;
+                
+                const filterComplex = [
+                    ...scaleFilters,
+                    concatFilter
+                ];
+
+                console.log('🔧 Filter complex:', filterComplex);
 
                 concatCommand
                     .complexFilter(filterComplex)
@@ -665,10 +712,10 @@ function buildVideo({ hookPath, bodyPaths, catPath, voiceoverPath, logoOverlayPa
                         console.log('✅ Step 1 - Video concatenation completed without audio');
                         // Step 2: Add voiceover if needed
                         if (voiceoverPath) {
-                            addVoiceoverToVideo(tempVideoPath, voiceoverPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, outputPath, resolve, reject);
+                            addVoiceoverToVideo(tempVideoPath, voiceoverPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, tiktokCaptionsEnabled, tiktokCaptionStyle, outputPath, resolve, reject);
                         } else {
                             // No voiceover - apply logo and captions if needed, then finish
-                            applyVideoEffects(tempVideoPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, outputPath, resolve, reject);
+                            applyVideoEffects(tempVideoPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, tiktokCaptionsEnabled, tiktokCaptionStyle, outputPath, resolve, reject);
                         }
                     })
                     .on('error', reject)
@@ -683,7 +730,7 @@ function buildVideo({ hookPath, bodyPaths, catPath, voiceoverPath, logoOverlayPa
 }
 
 // Helper function to add voiceover to concatenated video with duration matching
-async function addVoiceoverToVideo(videoPath, voiceoverPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, outputPath, resolve, reject) {
+async function addVoiceoverToVideo(videoPath, voiceoverPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, tiktokCaptionsEnabled, tiktokCaptionStyle, outputPath, resolve, reject) {
     const fullVoiceoverPath = path.join(__dirname, '../..', voiceoverPath);
     console.log('🎬 Step 2 - Adding voiceover:', fullVoiceoverPath);
 
@@ -760,11 +807,11 @@ async function addVoiceoverToVideo(videoPath, voiceoverPath, logoOverlayPath, lo
                 console.log('✅ Step 2 - Voiceover added successfully with duration matching');
 
                 // Step 3: Apply logo overlay and captions if needed
-                if (logoOverlayPath || enableCaptions) {
+                if (logoOverlayPath || enableCaptions || tiktokCaptionsEnabled) {
                     console.log('🎬 Step 3 - Applying logo overlay and/or captions...');
                     try {
                         await new Promise((effectsResolve, effectsReject) => {
-                            applyVideoEffects(outputPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, outputPath, effectsResolve, effectsReject);
+                            applyVideoEffects(outputPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, tiktokCaptionsEnabled, tiktokCaptionStyle, outputPath, effectsResolve, effectsReject);
                         });
                         console.log('✅ Video composition completed with logo and/or captions');
 
@@ -818,7 +865,7 @@ async function addVoiceoverToVideo(videoPath, voiceoverPath, logoOverlayPath, lo
 }
 
 // Helper function to apply logo overlay and captions to video
-async function applyVideoEffects(inputPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, outputPath, resolve, reject) {
+async function applyVideoEffects(inputPath, logoOverlayPath, logoPosition, logoOpacity, logoSize, enableCaptions, captionStyle, tiktokCaptionsEnabled, tiktokCaptionStyle, outputPath, resolve, reject) {
     try {
         const tempEffectsPath = outputPath.replace('.mp4', '_effects_temp.mp4');
 
@@ -862,8 +909,44 @@ async function applyVideoEffects(inputPath, logoOverlayPath, logoPosition, logoO
             inputCount = 2;
         }
 
+        let tiktokCaptionData = null;
+
         // Add captions if enabled
-        if (enableCaptions) {
+        if (tiktokCaptionsEnabled) {
+            // Use TikTok-style captions with Whisper transcription
+            try {
+                console.log('🎬 Generating TikTok-style captions...');
+                console.log('🎬 TikTok captions enabled:', tiktokCaptionsEnabled);
+                console.log('🎬 TikTok caption style:', tiktokCaptionStyle);
+                console.log('🎬 Input video path:', inputPath);
+                
+                tiktokCaptionData = await tiktokCaptionService.generateCaptionData(
+                    inputPath, 
+                    tiktokCaptionStyle
+                );
+                
+                console.log('✅ TikTok caption data generated successfully');
+                console.log('📊 Caption segments count:', tiktokCaptionData ? tiktokCaptionData.length : 0);
+                
+                if (tiktokCaptionData && tiktokCaptionData.length > 0) {
+                    console.log('📝 First few caption segments:');
+                    tiktokCaptionData.slice(0, 3).forEach((caption, index) => {
+                        console.log(`  Caption ${index}: "${caption.text}" (${caption.start}s - ${caption.end}s)`);
+                    });
+                } else {
+                    console.log('⚠️ No caption data generated');
+                }
+            } catch (error) {
+                console.error('❌ Error generating TikTok captions:', error);
+                console.error('📍 Error stack:', error.stack);
+                console.log('🔄 Falling back to basic captions...');
+                // Fall back to basic captions
+                tiktokCaptionsEnabled = false;
+                enableCaptions = true;
+            }
+        }
+        
+        if (enableCaptions && !tiktokCaptionsEnabled) {
             // Try to get actual script content for captions
             let captionText = 'Generated Video'; // Default fallback
 
@@ -904,6 +987,33 @@ async function applyVideoEffects(inputPath, logoOverlayPath, logoPosition, logoO
 
             complexFilter.push(`${videoInput}drawtext=text='${escapedText}':${style}:x=(w-text_w)/2:y=h-text_h-40[video_with_captions]`);
             videoInput = '[video_with_captions]';
+        }
+        
+        // Add TikTok captions if available
+        if (tiktokCaptionData && tiktokCaptionData.length > 0) {
+            console.log('🎬 Adding TikTok caption overlays to FFmpeg filter chain...');
+            console.log('� Number of caption segments to apply:', tiktokCaptionData.length);
+            console.log('📝 Current video input chain:', videoInput);
+            
+            tiktokCaptionData.forEach((caption, index) => {
+                const filterName = `video_with_tiktok_caption_${index}`;
+                console.log(`🎯 Caption ${index}: "${caption.text}" (${caption.start}s-${caption.end}s)`);
+                console.log(`🔧 FFmpeg filter: ${caption.filter}`);
+                
+                // The filter already includes drawtext=..., so we concatenate directly like basic captions
+                const fullFilter = `${videoInput}${caption.filter}[${filterName}]`;
+                console.log(`🔗 Full filter string: ${fullFilter}`);
+                complexFilter.push(fullFilter);
+                videoInput = `[${filterName}]`;
+            });
+            console.log('✅ TikTok caption overlays added to filter chain');
+            console.log('🔗 Final video input chain:', videoInput);
+            console.log('📋 Complete filter chain:', complexFilter);
+        } else {
+            console.log('⚠️ No TikTok caption data available for FFmpeg application');
+            if (tiktokCaptionsEnabled) {
+                console.log('❓ TikTok captions were enabled but no data was generated');
+            }
         }
 
         const effectsCommand = ffmpeg()
@@ -975,6 +1085,7 @@ async function applyVideoEffects(inputPath, logoOverlayPath, logoPosition, logoO
                     }
 
                     console.log('✅ Video composition completed with logo and/or captions');
+                    
                     resolve();
 
                 } catch (error) {
@@ -1035,5 +1146,22 @@ function getVideoFileDuration(filePath) {
         });
     });
 }
+
+// Get available TikTok caption styles
+router.get('/caption-styles', auth, async (req, res) => {
+    try {
+        const result = await db.query(
+            'SELECT style_id, name, description FROM caption_styles ORDER BY name'
+        );
+        
+        res.json({
+            success: true,
+            styles: result.rows
+        });
+    } catch (error) {
+        console.error('Error fetching caption styles:', error);
+        res.status(500).json({ error: 'Failed to fetch caption styles' });
+    }
+});
 
 module.exports = router;
