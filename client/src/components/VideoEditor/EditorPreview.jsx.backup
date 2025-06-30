@@ -1,0 +1,227 @@
+import React, { forwardRef, useImperativeHandle, useRef, useCallback, useEffect, useState } from 'react';
+import { Player } from '@remotion/player';
+import RemotionComposition from './RemotionComposition';
+
+const EditorPreview = forwardRef(({
+    compositionId,
+    inputProps,
+    onPlay,
+    onPause,
+    onFrameUpdate,
+    width = 360,
+    height = 640
+}, ref) => {
+    const playerRef = useRef();
+    const isMountedRef = useRef(true);
+    const [isPlayerReady, setIsPlayerReady] = useState(false);
+
+    // Initialize mount tracking
+    useEffect(() => {
+        isMountedRef.current = true;
+        setIsPlayerReady(true);
+
+        return () => {
+            isMountedRef.current = false;
+            setIsPlayerReady(false);
+            // Clean up player - no complex error handling
+            const player = playerRef.current;
+            if (player) {
+                try {
+                    player.pause();
+                } catch {
+                    // Ignore all cleanup errors
+                }
+            }
+        };
+    }, []);
+
+    // Simple container styling
+    const containerStyle = {
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#000000'
+    };
+
+    const playerStyle = {
+        width: width,
+        height: height,
+        maxWidth: '100%',
+        maxHeight: '100%',
+        backgroundColor: '#000000',
+        borderRadius: '8px'
+    };
+
+    // Simplified player control methods
+    const handlePlay = useCallback(() => {
+        if (playerRef.current && isMountedRef.current && isPlayerReady) {
+            try {
+                playerRef.current.play();
+            } catch {
+                // Ignore all errors
+            }
+        }
+    }, [isPlayerReady]);
+
+    const handlePause = useCallback(() => {
+        if (playerRef.current && isMountedRef.current && isPlayerReady) {
+            try {
+                playerRef.current.pause();
+            } catch {
+                // Ignore all errors
+            }
+        }
+    }, [isPlayerReady]);
+
+    const handleSeekTo = useCallback((frame) => {
+        if (playerRef.current && isMountedRef.current && isPlayerReady) {
+            try {
+                const safeFrame = Math.max(0, Math.min(frame, (inputProps.duration || 300) - 1));
+                playerRef.current.seekTo(safeFrame);
+            } catch {
+                // Ignore all errors
+            }
+        }
+    }, [inputProps.duration, isPlayerReady]);
+
+    const handleGetCurrentFrame = useCallback(() => {
+        if (playerRef.current && isMountedRef.current && isPlayerReady) {
+            try {
+                return playerRef.current.getCurrentFrame() || 0;
+            } catch {
+                return 0;
+            }
+        }
+        return 0;
+    }, [isPlayerReady]);
+
+    useImperativeHandle(ref, () => ({
+        play: handlePlay,
+        pause: handlePause,
+        seekTo: handleSeekTo,
+        getCurrentFrame: handleGetCurrentFrame,
+        isPlaying: () => {
+            if (!isMountedRef.current || !playerRef.current || !isPlayerReady) return false;
+            try {
+                return playerRef.current.isPlaying() || false;
+            } catch {
+                return false;
+            }
+        },
+        getProgress: () => {
+            if (!isMountedRef.current || !playerRef.current || !isPlayerReady) return 0;
+            try {
+                return playerRef.current.getProgress() || 0;
+            } catch {
+                return 0;
+            }
+        },
+        getDuration: () => inputProps.duration || 300,
+        cleanup: () => {
+            if (playerRef.current && isMountedRef.current) {
+                try {
+                    playerRef.current.pause();
+                } catch {
+                    // Ignore all errors
+                }
+            }
+        }
+    }), [handlePlay, handlePause, handleSeekTo, handleGetCurrentFrame, inputProps.duration, isPlayerReady]);
+
+    // Simplified error handling callbacks
+    const handlePlayCallback = useCallback(() => {
+        if (isMountedRef.current && onPlay) {
+            try {
+                onPlay();
+            } catch {
+                // Ignore callback errors
+            }
+        }
+    }, [onPlay]);
+
+    const handlePauseCallback = useCallback(() => {
+        if (isMountedRef.current && onPause) {
+            try {
+                onPause();
+            } catch {
+                // Ignore callback errors
+            }
+        }
+    }, [onPause]);
+
+    const handleFrameUpdateCallback = useCallback((frame) => {
+        if (isMountedRef.current && onFrameUpdate) {
+            try {
+                onFrameUpdate(frame);
+            } catch {
+                // Ignore callback errors
+            }
+        }
+    }, [onFrameUpdate]);
+
+    // Static key to prevent unnecessary re-renders
+    const playerKey = `player-${compositionId || 'default'}`;
+
+    return (
+        <div style={containerStyle}>
+            <div className="relative rounded-lg overflow-hidden bg-black border border-gray-600 shadow-xl max-w-full max-h-full">
+                {isPlayerReady && (
+                    <Player
+                        key={playerKey}
+                        ref={playerRef}
+                        component={RemotionComposition}
+                        inputProps={inputProps}
+                        durationInFrames={inputProps.duration || 300}
+                        compositionWidth={1080}
+                        compositionHeight={1920}
+                        fps={30}
+                        style={playerStyle}
+                        controls={false}
+                        onPlay={handlePlayCallback}
+                        onPause={handlePauseCallback}
+                        onFrameUpdate={handleFrameUpdateCallback}
+                        onError={() => {
+                            // Just ignore errors completely
+                        }}
+                        // Minimal safe configuration
+                        clickToPlay={false}
+                        doubleClickToFullscreen={false}
+                        spaceKeyToPlayOrPause={false}
+                        numberOfSharedAudioTags={0}
+                        allowFullscreen={false}
+                        showVolumeControls={false}
+                        playbackRate={1}
+                        loop={false}
+                        muted={true}
+                        initiallyShowControls={false}
+                        moveToBeginningWhenEnded={false}
+                        showPosterWhenUnplayed={false}
+                        showPosterWhenPaused={false}
+                        showPosterWhenEnded={false}
+                        renderLoading={() => (
+                            <div className="flex items-center justify-center w-full h-full bg-gray-900">
+                                <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                            </div>
+                        )}
+                    />
+                )}
+                
+                {/* Simple loading state */}
+                {!inputProps.videoSrc && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-800 rounded-lg">
+                        <div className="text-gray-300 text-center">
+                            <div className="animate-spin w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+                            <p className="text-sm">Loading video...</p>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+});
+
+EditorPreview.displayName = 'EditorPreview';
+
+export default EditorPreview;
